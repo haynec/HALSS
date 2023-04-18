@@ -10,11 +10,11 @@ sys.path.append(os .getcwd())
 #import airsim
 
 
-from HALSS.HALSS_utils.point_cloud_to_image import maximum_possible_points, surface_normal_from_interp_model
-from HALSS.HALSS_utils.network_utils.model_arch import *
-from HALSS.HALSS_utils.network_utils.augment import *
-from HALSS.HALSS_utils.seg_utils import *
-from AirSim.utils.airsim_traj_utils import nparray2vector3rlist
+from HALSS_utils.point_cloud_to_image import maximum_possible_points, surface_normal_from_interp_model
+from HALSS_utils.network_utils.model_arch import *
+from HALSS_utils.network_utils.augment import *
+from HALSS_utils.seg_utils import *
+#from AirSim.utils.airsim_traj_utils import nparray2vector3rlist
 
 import numpy as np
 
@@ -27,7 +27,6 @@ import torch.nn.functional as F
 
 from scipy import interpolate
 import scipy.ndimage
-from airsim.types import Vector3r
 
 import time
 
@@ -455,6 +454,7 @@ def multithread_fine_site_selection(halss_global, flags, params):
     t.join()
     if flags.flag_debug:
       print("[HALSS: Finished thread to update landing site: ", idx, "]")
+  halss_global.variance_map_vis = cv2.applyColorMap(halss_global.variance_map_vis, cv2.COLORMAP_INFERNO)
   return halss_global
 
 class halss_data_packet:
@@ -607,7 +607,8 @@ class halss_data_packet:
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     print('--> [HALSS: Using ', torch.cuda.get_device_name(0), ' for learning based Coarse HD]')
 
-    net.load_model(os. getcwd() + f"\\HALSS\\HALSS_utils\\network_utils\\unet_epoch6.pth")
+    print(os.getcwd())
+    net.load_model(f"HALSS_utils\\network_utils\\unet_epoch6.pth")
     net.train()
     net.to(device);  # remove semi-colon to see net structure
     
