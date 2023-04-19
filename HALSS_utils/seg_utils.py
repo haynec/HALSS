@@ -1,7 +1,6 @@
 from pyparsing import col
-
-from HALSS_utils.network_utils.model_arch_dropout import *
-from HALSS_utils.network_utils.augment import *
+from HALSS.HALSS_utils.network_utils.model_arch_dropout import *
+from HALSS.HALSS_utils.network_utils.augment import *
 #from point_cloud_to_image import pc_surf_normal
 #from traj_utils import *
 import os

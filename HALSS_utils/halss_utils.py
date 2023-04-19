@@ -3,17 +3,16 @@
 from distutils.command.build import build
 from multiprocessing.spawn import old_main_modules
 
-from pyparsing import col
+
 import sys
 import os
 sys.path.append(os .getcwd())
-#import airsim
 
 
-from HALSS_utils.point_cloud_to_image import maximum_possible_points, surface_normal_from_interp_model
-from HALSS_utils.network_utils.model_arch import *
-from HALSS_utils.network_utils.augment import *
-from HALSS_utils.seg_utils import *
+from HALSS.HALSS_utils.point_cloud_to_image import maximum_possible_points, surface_normal_from_interp_model
+from HALSS.HALSS_utils.network_utils.model_arch import *
+from HALSS.HALSS_utils.network_utils.augment import *
+from HALSS.HALSS_utils.seg_utils import *
 #from AirSim.utils.airsim_traj_utils import nparray2vector3rlist
 
 import numpy as np
