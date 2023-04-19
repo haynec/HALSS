@@ -1,5 +1,7 @@
 # HALSS
 
+Description TBD
+
 ## Citing
 If you use either of the aforementioned algorithms, kindly cite the following associated publication.
 ```
