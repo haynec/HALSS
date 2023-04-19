@@ -13,7 +13,7 @@ from HALSS.HALSS_utils.point_cloud_to_image import maximum_possible_points, surf
 from HALSS.HALSS_utils.network_utils.model_arch import *
 from HALSS.HALSS_utils.network_utils.augment import *
 from HALSS.HALSS_utils.seg_utils import *
-#from AirSim.utils.airsim_traj_utils import nparray2vector3rlist
+from AirSim.utils.airsim_traj_utils import nparray2vector3rlist
 
 import numpy as np
 
@@ -26,6 +26,7 @@ import torch.nn.functional as F
 
 from scipy import interpolate
 import scipy.ndimage
+from airsim.types import Vector3r
 
 import time
 
@@ -607,7 +608,7 @@ class halss_data_packet:
     print('--> [HALSS: Using ', torch.cuda.get_device_name(0), ' for learning based Coarse HD]')
 
     print(os.getcwd())
-    net.load_model(f"HALSS_utils\\network_utils\\unet_epoch6.pth")
+    net.load_model(f"HALSS\\HALSS_utils\\network_utils\\unet_epoch6.pth")
     net.train()
     net.to(device);  # remove semi-colon to see net structure
     
