@@ -156,7 +156,7 @@ def multi_fine_landing_site_selection(thread_idx, halss_global, params, flags, b
   halss_local.landing_selection(flags)
   
   if flags.flag_save_pointclouds:
-    np.save("Fine Landing Site Pointcloud " + str(thread_idx) + ".npy", halss_local.pcd_culled)
+    np.save(params.media_save_path + "Fine Landing Site Pointcloud " + str(thread_idx) + ".npy", halss_local.pcd_culled)
   if flags.flag_show_single_safety_fine:
     cv2.imshow("Fine Landing Site Safety Map with Circle" + str(thread_idx), halss_local.safety_map_circles)
     cv2.imshow("Fine Landing Site Surface Normal " + str(thread_idx), halss_local.surf_norm)
@@ -166,6 +166,7 @@ def multi_fine_landing_site_selection(thread_idx, halss_global, params, flags, b
     cv2.imwrite(params.media_save_path + "Fine Landing Site Safety Map " + str(thread_idx) + ".png", halss_local.safety_map)
     cv2.imwrite(params.media_save_path + "Fine Landing Site Surface Normal " + str(thread_idx) + ".png", halss_local.surf_norm)
     cv2.imwrite(params.media_save_path + "Fine Angle Map " + str(thread_idx) + ".png", scale_theta(halss_local.angle_map))
+    cv2.imwrite(params.media_save_path + "Fine Skeleton " + str(thread_idx) + ".png", halss_local.skeleton)
   halss_local.radii_ned = halss_local.sf_x*np.array((halss_local.radii_uv)).astype("float") # Convert new radii to numpy array
   new_center_coords_ned = np.squeeze(halss_local.center_coords_ned)
   halss_global.radii_ned[thread_idx] = halss_local.radii_ned  
@@ -379,6 +380,7 @@ def hazard_detection_coarse(halss_global, flags, params):
   # #####################
   t0_network = time.time()
   halss_global.run_network(params)
+  halss_global.variance_map_vis = cv2.applyColorMap(halss_global.variance_map_vis, cv2.COLORMAP_INFERNO)
   t1_network = time.time()
   if flags.flag_timing:
     print("--> [TIMING: Time to run network: ", t1_network-t0_network, "]")
@@ -396,6 +398,7 @@ def coarse_landing_region_selection(halss_global, flags, params):
     cv2.imshow("Global Safety Map with Reigons", cv2.resize(halss_global.safety_map_circles, (2*halss_global.safety_map_circles.shape[1], 2*halss_global.safety_map_circles.shape[0])))
   if flags.flag_save_images:
     cv2.imwrite(params.media_save_path + "Global_Safety_Map_with_Regions.png", halss_global.safety_map_circles)
+    cv2.imwrite(params.media_save_path + "Global_Medial_Axis_Skeleton.png", halss_global.skeleton)
   
   halss_global.radii_ned = halss_global.sf_x*np.array((halss_global.radii_uv)).astype("float") # Convert new radii to numpy array
   return halss_global
@@ -454,7 +457,6 @@ def multithread_fine_site_selection(halss_global, flags, params):
     t.join()
     if flags.flag_debug:
       print("[HALSS: Finished thread to update landing site: ", idx, "]")
-  halss_global.variance_map_vis = cv2.applyColorMap(halss_global.variance_map_vis, cv2.COLORMAP_INFERNO)
   return halss_global
 
 class halss_data_packet:
@@ -707,27 +709,32 @@ class halss_data_packet:
     self.surf_norm = cv2.bitwise_and(surf_norm, surf_norm, mask = masked_surf_norm[:,:,0])
 
   def landing_selection(self, flags):
-    data = prep_safety_mask(self.safety_map)
-    
-    # Compute the medial axis (skeleton) and the distance transform
-    skel, distance = medial_axis(data, return_distance=True)
-    dist_on_skel = distance * skel
+      data = prep_safety_mask(self.safety_map)
+      
+      # Compute the medial axis (skeleton) and the distance transform
+      skel, distance = medial_axis(data, return_distance=True)
+      kernel = np.ones((2, 2), np.uint8)
+      skel = cv2.dilate(skel.astype(np.uint8), kernel, iterations=1)
+      dist_on_skel = distance * skel
 
+      center_coords, radii = topNCircles(distance, self.num_circles)
+      u_vec = np.zeros(len(center_coords))
+      v_vec = np.zeros(len(center_coords))
+      for i in range(len(center_coords)):
+          u_vec[i] = center_coords[i][0][0]
+          v_vec[i] = center_coords[i][1][0]
 
-    center_coords, radii = topNCircles(distance, self.num_circles)
-    u_vec = np.zeros(len(center_coords))
-    v_vec = np.zeros(len(center_coords))
-    for i in range(len(center_coords)):
-        u_vec[i] = center_coords[i][0][0]
-        v_vec[i] = center_coords[i][1][0]
+      circles = plotCircles((u_vec, v_vec), radii, data)
+      self.radii_uv = radii
+      skeleton = dist_on_skel[2:dist_on_skel.shape[0]-2, 2:dist_on_skel.shape[1]-2]
+      skel_color = cv2.applyColorMap((normalize(skeleton)*255).astype(np.uint8), cv2.COLORMAP_HOT)
+      contours, hierarchy = cv2.findContours(self.safety_map.astype(np.uint8)[:,:,0], cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+      self.skeleton = cv2.drawContours(skel_color, contours, -1, (255, 255, 255), 1)
 
-    circles = plotCircles((u_vec, v_vec), radii, data)
-    self.radii_uv = radii
-    self.skeleton = dist_on_skel
-    self.safety_map_circles = circles
-    self.distance = distance
-    for idx, _ in enumerate(center_coords):
-      self.uv2ned(center_coords[idx][0][0], center_coords[idx][1][0], flags)
+      self.safety_map_circles = circles
+      self.distance = distance
+      for idx, _ in enumerate(center_coords):
+        self.uv2ned(center_coords[idx][0][0], center_coords[idx][1][0], flags)
   
   def percep2traj(self, scores, alt):
     landing_site_save = np.zeros((len(self.radii_ned),4)) # Initialize pack to send to traj planner to store new sites
