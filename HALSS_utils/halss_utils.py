@@ -156,7 +156,7 @@ def multi_fine_landing_site_selection(thread_idx, halss_global, params, flags, b
   halss_local.landing_selection(flags)
   
   if flags.flag_save_pointclouds:
-    np.save("Fine Landing Site Pointcloud " + str(thread_idx) + ".npy", halss_local.pcd_culled)
+    np.save(params.media_save_path + "Fine Landing Site Pointcloud " + str(thread_idx) + ".npy", halss_local.pcd_culled)
   if flags.flag_show_single_safety_fine:
     cv2.imshow("Fine Landing Site Safety Map with Circle" + str(thread_idx), halss_local.safety_map_circles)
     cv2.imshow("Fine Landing Site Surface Normal " + str(thread_idx), halss_local.surf_norm)
@@ -166,69 +166,11 @@ def multi_fine_landing_site_selection(thread_idx, halss_global, params, flags, b
     cv2.imwrite(params.media_save_path + "Fine Landing Site Safety Map " + str(thread_idx) + ".png", halss_local.safety_map)
     cv2.imwrite(params.media_save_path + "Fine Landing Site Surface Normal " + str(thread_idx) + ".png", halss_local.surf_norm)
     cv2.imwrite(params.media_save_path + "Fine Angle Map " + str(thread_idx) + ".png", scale_theta(halss_local.angle_map))
+    cv2.imwrite(params.media_save_path + "Fine Skeleton " + str(thread_idx) + ".png", halss_local.skeleton)
   halss_local.radii_ned = halss_local.sf_x*np.array((halss_local.radii_uv)).astype("float") # Convert new radii to numpy array
   new_center_coords_ned = np.squeeze(halss_local.center_coords_ned)
   halss_global.radii_ned[thread_idx] = halss_local.radii_ned  
   halss_global.center_coords_ned[thread_idx] = new_center_coords_ned.T
-  return halss_global
-
-def fine_landing_site_selection(halss_global, params, flags, buffer = 1.1):
-  new_radii_ned = np.zeros_like(halss_global.radii_ned)
-  new_center_coords_ned = np.zeros_like(halss_global.center_coords_ned.T)
-
-  for idx, radius_ned in enumerate(halss_global.radii_ned):
-    halss_local = halss_data_packet()
-    halss_local.num_circles = 1
-    halss_local.x_cell_size = params.x_cell_size_fine
-    halss_local.y_cell_size = params.y_cell_size_fine
-
-    dist_squared = (halss_global.pcd_full[:,0] - halss_global.center_coords_ned[idx][0])**2 + (halss_global.pcd_full[:,1] - (-halss_global.center_coords_ned[idx][1]))**2
-    within = dist_squared < (buffer*radius_ned)**2
-    halss_local.pcd_full = halss_global.pcd_full[within]
-    halss_local.pcd_new = halss_local.pcd_full
-
-    halss_local.downsample_pointcloud_dict()
-    halss_local.downsample_pointcloud()
-    
-    if len(halss_local.pcd_culled) > 10:
-      if flags.flag_debug:
-        print("--> [[FINE SELECTION] DEBUG: Number of points in local pointcloud for Site " + str(idx) + ": " + str(len(halss_local.pcd_culled)) + " out of " + str(maximum_possible_points(halss_local.pcd_full, halss_local.x_cell_size, halss_local.y_cell_size)) + " possible points]")
-      if len(halss_local.pcd_culled) > maximum_possible_points(halss_local.pcd_full, halss_local.x_cell_size, halss_local.y_cell_size):
-        print("--> [[FINE SELECTION] Warning!: Chris lost his mind downsampling small pointclouds]")
-      halss_local.pc_to_surf_normal(params)
-    else:
-      print("--> [[FINE SELECTION] Warning!: There are probably not enough points in the landing site to generate a surface normal. Setting Radius to 0]")
-      halss_local.radii_ned = 0.
-      continue
-
-    halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (320, 320))
-
-    halss_local.surf_norm_thresh(params)
-
-    halss_local.sn_x_min = 0
-    halss_local.sn_x_max = halss_local.safety_map.shape[1]
-    halss_local.sn_y_min = 0
-    halss_local.sn_y_max = halss_local.safety_map.shape[0]
-    halss_local.find_NED_orgin_uv()
-
-    halss_local.landing_selection(flags)
-    
-    if flags.flag_save_pointclouds:
-      np.save("Fine Landing Site Pointcloud " + str(idx) + ".npy", halss_local.pcd_culled)
-    if flags.flag_show_single_safety_fine:
-      cv2.imshow("Fine Landing Site Safety Map with Circle" + str(idx), halss_local.safety_map_circles)
-      cv2.imshow("Fine Landing Site Surface Normal " + str(idx), halss_local.surf_norm)
-      cv2.imshow("Fine Angle Map " + str(idx), scale_theta(halss_local.angle_map))
-    if flags.flag_save_images:
-      cv2.imwrite(params.media_save_path + "Fine Landing Site Safety Map with Circle " + str(idx) + ".png", halss_local.safety_map_circles)
-      cv2.imwrite(params.media_save_path + "Fine Landing Site Safety Map " + str(idx) + ".png", halss_local.safety_map)
-      cv2.imwrite(params.media_save_path + "Fine Landing Site Surface Normal " + str(idx) + ".png", halss_local.surf_norm)
-      cv2.imwrite(params.media_save_path + "Fine Angle Map " + str(idx) + ".png", scale_theta(halss_local.angle_map))
-    halss_local.radii_ned = halss_local.sf_x*np.array((halss_local.radii_uv)).astype("float") # Convert new radii to numpy array
-    new_radii_ned[idx] = halss_local.radii_ned
-    new_center_coords_ned[:,idx] = np.squeeze(halss_local.center_coords_ned)
-  halss_global.radii_ned = new_radii_ned  
-  halss_global.center_coords_ned = new_center_coords_ned.T
   return halss_global
 
 def scale_theta(img):
@@ -245,64 +187,6 @@ def binarize(safety_map):
   safety_map[safety_map == 255] = 255
   safety_map[safety_map < 255] = 0
   return safety_map
-
-
-def update_landing_site_radii(halss_global, params, flags, buffer = 2):
-  t0_update_landing_site_func = time.time()
-  new_radii_ned = np.zeros_like(halss_global.radii_ned)
-  radii_local = int(160*(1/buffer))
-
-  for idx, radius_ned in enumerate(halss_global.radii_ned):
-    halss_local = halss_data_packet()
-    halss_local.x_cell_size = params.x_cell_size_fine
-    halss_local.y_cell_size = params.y_cell_size_fine
-    
-    dist_squared = (halss_global.pcd_full[:,0] - halss_global.center_coords_ned[idx][0])**2 + (halss_global.pcd_full[:,1] - (-halss_global.center_coords_ned[idx][1]))**2
-    within = dist_squared < (buffer*radius_ned)**2
-    halss_local.pcd_full = halss_global.pcd_full[within]
-    halss_local.pcd_new = halss_local.pcd_full
-
-    halss_local.downsample_pointcloud_dict()
-    halss_local.downsample_pointcloud()
-    
-    if len(halss_local.pcd_culled) > 10:
-      if flags.flag_debug:
-        print("--> [[RADII UPDATE] DEBUG: Number of points in local pointcloud for Site " + str(idx) + ": " + str(len(halss_local.pcd_culled)) + " out of " + str(maximum_possible_points(halss_local.pcd_full, halss_local.x_cell_size, halss_local.y_cell_size)) + " possible points]")
-      if len(halss_local.pcd_culled) > maximum_possible_points(halss_local.pcd_full, halss_local.x_cell_size, halss_local.y_cell_size):
-        print("--> [[RADII UPDATE] Warning!: Chris can't downsample small pointclouds]")
-      halss_local.pc_to_surf_normal(params)
-    else:
-      print("--> [[RADII UPDATE] Warning!: There are probably not enough points in the landing site to generate a surface normal. Setting Radius to 0]")
-      halss_global.radii_ned[idx] = new_radii_ned = 0.
-      return halss_global
-
-    if halss_local.surf_norm.max == 0:
-      print("--> [[RADII UPDATE] Warning!: Surface normal is all zeros. Setting Radius to 0")
-      halss_global.radii_ned[idx] = new_radii_ned = 0.
-      return halss_global
-
-    halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (320, 320))
-    halss_local.surf_norm_thresh(params)
-    
-    new_radii_local = halss_local.update_landing_site_single(radii_local)
-    halss_local.safety_map_circles = plotCircles((160, 160), int(new_radii_local), halss_local.safety_map, 3) # Plot sites on safety map
-    if flags.flag_save_pointclouds:
-      np.save("Update Landing Site Pointcloud " + str(idx) + ".npy", halss_local.pcd_culled)
-    if flags.flag_show_single_safety:
-      cv2.imshow("Update Local Safety Map for Landing Site " + str(idx), halss_local.safety_map_circles)
-      cv2.imshow("Update Local Surface Normal " + str(idx), halss_local.surf_norm)
-    if flags.flag_save_images:
-      cv2.imwrite(params.media_save_path + "Update Landing Site Safety Map with Circle " + str(idx) + ".png", halss_local.safety_map_circles)
-      cv2.imwrite(params.media_save_path + "Update Landing Site Safety Map " + str(idx) + ".png", halss_local.safety_map)
-      cv2.imwrite(params.media_save_path + "Update Landing Site Surface Normal " + str(idx) + ".png", halss_local.surf_norm)
-      cv2.imwrite(params.media_save_path + "Update Landing Site Angle Map " + str(idx) + ".png", scale_theta(halss_local.angle_map))
-    radii_sf = new_radii_local/radii_local
-  new_radii_ned = radius_ned*radii_sf
-  t1_update_landing_site_func = time.time()
-  if flags.flag_timing:
-    print("--> [TIMING: Time to update landing site: ", t1_update_landing_site_func-t0_update_landing_site_func, "]")
-  halss_global.radii_ned[idx] = new_radii_ned
-  return halss_global
 
 def multi_update_landing_site_radii(thread_idx, halss_global, params, flags, buffer = 2):
   t0_update_landing_site_func = time.time()
@@ -378,7 +262,14 @@ def hazard_detection_coarse(halss_global, flags, params):
   # Run through Segmentation Network 
   # #####################
   t0_network = time.time()
-  halss_global.run_network(params)
+  if flags.flag_coarse_method == 'nn':
+    halss_global.run_network(params)
+  elif flags.flag_coarse_method == 'geo':
+    halss_global.surf_norm_thresh(params)
+    halss_global.vairance_map = np.ones_like(halss_global.safety_map)
+    halss_global.variance_map_vis = np.ones_like(halss_global.safety_map)
+
+  halss_global.variance_map_vis = cv2.applyColorMap(halss_global.variance_map_vis, cv2.COLORMAP_INFERNO)
   t1_network = time.time()
   if flags.flag_timing:
     print("--> [TIMING: Time to run network: ", t1_network-t0_network, "]")
@@ -396,6 +287,7 @@ def coarse_landing_region_selection(halss_global, flags, params):
     cv2.imshow("Global Safety Map with Reigons", cv2.resize(halss_global.safety_map_circles, (2*halss_global.safety_map_circles.shape[1], 2*halss_global.safety_map_circles.shape[0])))
   if flags.flag_save_images:
     cv2.imwrite(params.media_save_path + "Global_Safety_Map_with_Regions.png", halss_global.safety_map_circles)
+    cv2.imwrite(params.media_save_path + "Global_Medial_Axis_Skeleton.png", halss_global.skeleton)
   
   halss_global.radii_ned = halss_global.sf_x*np.array((halss_global.radii_uv)).astype("float") # Convert new radii to numpy array
   return halss_global
@@ -454,7 +346,6 @@ def multithread_fine_site_selection(halss_global, flags, params):
     t.join()
     if flags.flag_debug:
       print("[HALSS: Finished thread to update landing site: ", idx, "]")
-  halss_global.variance_map_vis = cv2.applyColorMap(halss_global.variance_map_vis, cv2.COLORMAP_INFERNO)
   return halss_global
 
 class halss_data_packet:
@@ -707,27 +598,32 @@ class halss_data_packet:
     self.surf_norm = cv2.bitwise_and(surf_norm, surf_norm, mask = masked_surf_norm[:,:,0])
 
   def landing_selection(self, flags):
-    data = prep_safety_mask(self.safety_map)
-    
-    # Compute the medial axis (skeleton) and the distance transform
-    skel, distance = medial_axis(data, return_distance=True)
-    dist_on_skel = distance * skel
+      data = prep_safety_mask(self.safety_map)
+      
+      # Compute the medial axis (skeleton) and the distance transform
+      skel, distance = medial_axis(data, return_distance=True)
+      kernel = np.ones((2, 2), np.uint8)
+      skel = cv2.dilate(skel.astype(np.uint8), kernel, iterations=1)
+      dist_on_skel = distance * skel
 
+      center_coords, radii = topNCircles(distance, self.num_circles)
+      u_vec = np.zeros(len(center_coords))
+      v_vec = np.zeros(len(center_coords))
+      for i in range(len(center_coords)):
+          u_vec[i] = center_coords[i][0][0]
+          v_vec[i] = center_coords[i][1][0]
 
-    center_coords, radii = topNCircles(distance, self.num_circles)
-    u_vec = np.zeros(len(center_coords))
-    v_vec = np.zeros(len(center_coords))
-    for i in range(len(center_coords)):
-        u_vec[i] = center_coords[i][0][0]
-        v_vec[i] = center_coords[i][1][0]
+      circles = plotCircles((u_vec, v_vec), radii, data)
+      self.radii_uv = radii
+      skeleton = dist_on_skel[2:dist_on_skel.shape[0]-2, 2:dist_on_skel.shape[1]-2]
+      skel_color = cv2.applyColorMap((normalize(skeleton)*255).astype(np.uint8), cv2.COLORMAP_HOT)
+      contours, hierarchy = cv2.findContours(self.safety_map.astype(np.uint8)[:,:,0], cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+      self.skeleton = cv2.drawContours(skel_color, contours, -1, (255, 255, 255), 1)
 
-    circles = plotCircles((u_vec, v_vec), radii, data)
-    self.radii_uv = radii
-    self.skeleton = dist_on_skel
-    self.safety_map_circles = circles
-    self.distance = distance
-    for idx, _ in enumerate(center_coords):
-      self.uv2ned(center_coords[idx][0][0], center_coords[idx][1][0], flags)
+      self.safety_map_circles = circles
+      self.distance = distance
+      for idx, _ in enumerate(center_coords):
+        self.uv2ned(center_coords[idx][0][0], center_coords[idx][1][0], flags)
   
   def percep2traj(self, scores, alt):
     landing_site_save = np.zeros((len(self.radii_ned),4)) # Initialize pack to send to traj planner to store new sites
@@ -812,6 +708,7 @@ class flags_required:
     self.flag_debug = None
     self.flag_save_pointclouds = None
     self.flag_offset = None
+    self.flag_coarse_method = "nn"
 
 class parameters:
   def __init__(self):
