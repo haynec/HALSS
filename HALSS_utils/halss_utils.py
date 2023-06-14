@@ -13,7 +13,12 @@ from HALSS.HALSS_utils.point_cloud_to_image import maximum_possible_points, surf
 from HALSS.HALSS_utils.network_utils.model_arch import *
 from HALSS.HALSS_utils.network_utils.augment import *
 from HALSS.HALSS_utils.seg_utils import *
-from AirSim.utils.airsim_traj_utils import nparray2vector3rlist
+from HALSS.HALSS_utils.plotting_utils import *
+try:
+  from AirSim.utils.airsim_traj_utils import nparray2vector3rlist
+  from airsim.types import Vector3r
+except:
+  print("--> [WARNING]: Failed to import airsim packages. If you are using the Jupyter Notebook, this can be safely ignored.")
 
 import numpy as np
 
@@ -26,17 +31,16 @@ import torch.nn.functional as F
 
 from scipy import interpolate
 import scipy.ndimage
-from airsim.types import Vector3r
 
 import time
 
-def convert_grey_to_color(safety_map):
-  color_safety_map = np.zeros((3,320,320))
-  color_safety_map[0] = safety_map
-  color_safety_map[1] = safety_map
-  color_safety_map[2] = safety_map
-  color_safety_map = color_safety_map.transpose(1,2,0)
-  return color_safety_map
+# def convert_grey_to_color(safety_map):
+#   color_safety_map = np.zeros((3,320,320))
+#   color_safety_map[0] = safety_map
+#   color_safety_map[1] = safety_map
+#   color_safety_map[2] = safety_map
+#   color_safety_map = color_safety_map.transpose(1,2,0)
+#   return color_safety_map
 
 def invert(png):
   # Invert the image
@@ -114,10 +118,8 @@ def scale_image(img, pcd_combined_array):
   return img
 
 def multi_fine_landing_site_selection(thread_idx, halss_global, params, flags, buffer = 1.1):
-  #new_radii_ned = np.zeros_like(halss_global.radii_ned)
   new_center_coords_ned = np.zeros_like(halss_global.center_coords_ned[0])
 
-  #for idx, radius_ned in enumerate(halss_global.radii_ned):
   halss_local = halss_data_packet()
   halss_local.num_circles = 1
   halss_local.x_cell_size = params.x_cell_size_fine
@@ -143,7 +145,7 @@ def multi_fine_landing_site_selection(thread_idx, halss_global, params, flags, b
     halss_local.radii_ned = 0.
     return halss_global
 
-  halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (320, 320))
+  halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (params.grid_res, params.grid_res))
 
   halss_local.surf_norm_thresh(params)
 
@@ -171,6 +173,7 @@ def multi_fine_landing_site_selection(thread_idx, halss_global, params, flags, b
   new_center_coords_ned = np.squeeze(halss_local.center_coords_ned)
   halss_global.radii_ned[thread_idx] = halss_local.radii_ned  
   halss_global.center_coords_ned[thread_idx] = new_center_coords_ned.T
+  halss_global.halss_locals.append(halss_local)
   return halss_global
 
 def scale_theta(img):
@@ -191,7 +194,7 @@ def binarize(safety_map):
 def multi_update_landing_site_radii(thread_idx, halss_global, params, flags, buffer = 2):
   t0_update_landing_site_func = time.time()
   # new_radii_ned = np.zeros_like(halss_global.radii_ned)
-  radii_local = int(160*(1/buffer))
+  radii_local = int(params.grid_res/2*(1/buffer))
   radius_ned = halss_global.radii_ned[thread_idx]
 
   #for idx, radius_ned in enumerate(halss_global.radii_ned):
@@ -223,11 +226,11 @@ def multi_update_landing_site_radii(thread_idx, halss_global, params, flags, buf
     halss_global.radii_ned[thread_idx] = new_radii_ned = 0.
     return 
 
-  halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (320, 320))
+  halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (params.grid_res, params.grid_res))
   halss_local.surf_norm_thresh(params)
   
   new_radii_local = halss_local.update_landing_site_single(radii_local)
-  halss_local.safety_map_circles = plotCircles((160, 160), int(new_radii_local), halss_local.safety_map, 3) # Plot sites on safety map
+  halss_local.safety_map_circles = plotCircles((params.grid_res/2, params.grid_res/2), int(new_radii_local), halss_local.safety_map, 3) # Plot sites on safety map
   if flags.flag_save_pointclouds:
     np.save("Update Landing Site Pointcloud " + str(thread_idx) + ".npy", halss_local.pcd_culled)
   if flags.flag_show_single_safety:
@@ -273,6 +276,7 @@ def hazard_detection_coarse(halss_global, flags, params):
   t1_network = time.time()
   if flags.flag_timing:
     print("--> [TIMING: Time to run network: ", t1_network-t0_network, "]")
+  halss_global.surf_norm = scale_image(halss_global.surf_norm, halss_global.pcd_full)
   return halss_global
 
 def coarse_landing_region_selection(halss_global, flags, params):
@@ -339,7 +343,6 @@ def multithread_fine_site_selection(halss_global, flags, params):
     t = threading.Thread(target=multi_fine_landing_site_selection, args=(idx, halss_global, params, flags))
     threads.append(t)
     t.start()
-    #halss_global = multi_fine_landing_site_selection(idx, halss_global, params, flags)
     if flags.flag_debug:
       print("[HALSS: Starting thread to update landing site: ", idx, "]")
   for idx, t in enumerate(threads):
@@ -381,6 +384,7 @@ class halss_data_packet:
     self.safety_map_circles = np.array([])
     self.skeleton = np.array([])
     self.distance_map = np.array([])
+    self.halss_locals = []
 
   def scale_uv_2_world(self):
     self.pcd_x_min = self.pcd_full[:,0].min()
@@ -551,7 +555,7 @@ class halss_data_packet:
     theta_mat = np.arccos(cos_theta_mat)*180/np.pi
     safety_map = np.zeros_like(self.surf_norm[:,:,0])
     safety_map[theta_mat < params.alpha] = 255
-    safety_map_color = np.zeros((320,320,3))
+    safety_map_color = np.zeros((params.grid_res,params.grid_res,3))
     safety_map_color[:,:,0] = safety_map
     safety_map_color[:,:,1] = safety_map
     safety_map_color[:,:,2] = safety_map
@@ -709,6 +713,7 @@ class flags_required:
     self.flag_save_pointclouds = None
     self.flag_offset = None
     self.flag_coarse_method = "nn"
+    self.flag_jupyter_plot = None
 
 class parameters:
   def __init__(self):

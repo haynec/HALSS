@@ -1,4 +1,4 @@
-# HALSS
+# Hazard-Aware Landing Site Selection (HALSS)
 
 Description TBD
 
