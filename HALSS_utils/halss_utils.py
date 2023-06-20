@@ -1,9 +1,3 @@
-# In settings.json first activate computer vision mode:
-# https://github.com/Microsoft/AirSim/blob/master/docs/image_apis.md#computer-vision-mode
-from distutils.command.build import build
-from multiprocessing.spawn import old_main_modules
-
-
 import sys
 import os
 sys.path.append(os .getcwd())
@@ -33,14 +27,6 @@ from scipy import interpolate
 import scipy.ndimage
 
 import time
-
-# def convert_grey_to_color(safety_map):
-#   color_safety_map = np.zeros((3,320,320))
-#   color_safety_map[0] = safety_map
-#   color_safety_map[1] = safety_map
-#   color_safety_map[2] = safety_map
-#   color_safety_map = color_safety_map.transpose(1,2,0)
-#   return color_safety_map
 
 def invert(png):
   # Invert the image
