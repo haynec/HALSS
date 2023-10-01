@@ -42,7 +42,7 @@ def surface_normal_from_interp_model(x_grid, y_grid, Z_interp, params):
     return normal_image
 
 # params 
-grid_res = 320
+# grid_res = 320
 
 def collect_lidar(client):
     xyz_data = []
