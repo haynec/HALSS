@@ -47,7 +47,7 @@ def surface_normal_from_interp_model(x_grid, y_grid, Z_interp, params):
 def collect_lidar(client):
     xyz_data = []
     t0_lidar = time.time()
-    lidar_data = client.getLidarData(lidar_name = "LidarSensor1" ,vehicle_name = "Drone1")    # get general lidar data
+    lidar_data = client.getLidarData(lidar_name = "LidarSensor2" ,vehicle_name = "Drone1")    # get general lidar data
     tf_lidar = time.time() - t0_lidar
     t0_lidarprocess = time.time()
     for i in range(int(len(lidar_data.point_cloud)/3)):   # xyz data to array
