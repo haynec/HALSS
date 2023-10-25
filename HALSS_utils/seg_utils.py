@@ -144,10 +144,14 @@ def plotCircles(centers, radii, image, color = None, thickness = 1):
     
     if type(centers[0]) is int: # Captures the case of only one circle
         idx = 1
+    elif type(centers[0]) is float:
+        idx = 1
     else:
         idx = len(centers[0])
     
     if type(radii) is int: # Captures the case of only one circle
+        radii = [radii]
+    elif type(radii) is float:
         radii = [radii]
     else:
         radii = radii
@@ -155,6 +159,9 @@ def plotCircles(centers, radii, image, color = None, thickness = 1):
     for i in range(idx):
         radius = int(radii[i])
         if type(centers[0]) is int:
+            xc = int(centers[0]+2)
+            yc = int(centers[1]+2)
+        elif type(centers[0]) is float:
             xc = int(centers[0]+2)
             yc = int(centers[1]+2)
         else:
