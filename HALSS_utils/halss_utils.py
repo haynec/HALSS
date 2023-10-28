@@ -9,7 +9,7 @@ from HALSS.HALSS_utils.network_utils.augment import *
 from HALSS.HALSS_utils.seg_utils import *
 from HALSS.HALSS_utils.plotting_utils import *
 try:
-  from AirSim.utils.airsim_traj_utils import nparray2vector3rlist
+  from AirSim.sim_utils import nparray2vector3rlist
   from airsim.types import Vector3r
 except:
   print("--> [WARNING]: Failed to import airsim packages. If you are using the Jupyter Notebook, this can be safely ignored.")
