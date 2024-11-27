@@ -1,117 +1,73 @@
-from pyparsing import col
-from HALSS.HALSS_utils.network_utils.model_arch_dropout import *
-from HALSS.HALSS_utils.network_utils.augment import *
-#from point_cloud_to_image import pc_surf_normal
-#from traj_utils import *
-import os
-import tqdm
-import hashlib
-import requests
-import threading
-
-#from numba import jit
-
 import numpy as np
-import matplotlib.pyplot as plt
-
-# requires Python 3.5.3 :: Anaconda 4.4.0
-# pip install opencv-python
 import cv2
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-from datetime import datetime
-from scipy.ndimage import gaussian_filter
-from scipy.ndimage import find_objects, binary_fill_holes
-from scipy.ndimage import generate_binary_structure, label
-from scipy.optimize import linear_sum_assignment
 from skimage.morphology import medial_axis
-import scipy.ndimage
 
-import time
-import sys
+def invert(png):
+    # Invert the image
+    inverted = 255 - png
+    return inverted
 
-# Debugger
-from pdb import set_trace as debug
+def scale_image(img, pcd_combined_array):
+    # Takes in image and {min_x, max_x, min_y, max_y} of point cloud and scales the image proportionally
+    resize_fac = ((pcd_combined_array[:,1].max()-pcd_combined_array[:,1].min())/(pcd_combined_array[:,0].max()-pcd_combined_array[:,0].min()))
+    img = cv2.resize(img, (img.shape[0], int(img.shape[1]*resize_fac)))
+    return img
 
-flag_use_pc_surf_norm = True
-flag_use_mc_dropout = True
+def scale_theta(img):
+    # 
+    img = img.astype(np.float32)
+    img = img - np.min(img)
+    img = img / np.max(img)
+    img = img * 255
+    img = img.astype(np.uint8)
+    img = 255-img
+    return img
 
-def getRotMatrix_uv2worldNED(client):
-        cam_info = client.simGetCameraInfo(3)
-        kin = client.simGetGroundTruthKinematics()
-        orientation = kin.orientation
-        q0, q1, q2, q3 = orientation.w_val, orientation.x_val, orientation.y_val, orientation.z_val
-        rotation_matrix = np.array(([1-2*(q2*q2+q3*q3),2*(q1*q2-q3*q0),2*(q1*q3+q2*q0)],
-                                        [2*(q1*q2+q3*q0),1-2*(q1*q1+q3*q3),2*(q2*q3-q1*q0)],
-                                        [2*(q1*q3-q2*q0),2*(q2*q3+q1*q0),1-2*(q1*q1+q2*q2)]))
-        return rotation_matrix, kin, cam_info
+def binarize(safety_map):
+    safety_map[safety_map == 255] = 255
+    safety_map[safety_map < 255] = 0
+    return safety_map
+
+def surface_normal_from_interp_model(x_grid, y_grid, Z_interp, params):
+    grad = np.gradient(Z_interp, y_grid, x_grid)
+    dx = grad[1]
+    dy = grad[0]
+    normal = np.zeros((params.grid_res,params.grid_res,3))
+
+    normal[:,:,0] = -dx
+    normal[:,:,1] = -dy
+    normal[:,:,2] = np.ones((params.grid_res,params.grid_res))
+    normal_unit = np.zeros((params.grid_res,params.grid_res,3))
+    normal_unit = normal/np.linalg.norm(normal, axis = 2).reshape(params.grid_res,params.grid_res,1)
+
+    normal_unit_color = np.multiply((normal_unit+1), 255*.5)
+    channel_red = normal_unit_color[:,:,1]
+    channel_green = normal_unit_color[:,:,0]
+    channel_blue = normal_unit_color[:,:,2]
+    normal_image = np.flipud(np.dstack((channel_red, channel_green, channel_blue)).astype(np.uint8))
+    return normal_image
+
+def maximum_possible_points(pcd, x_cell_size, y_cell_size):
+    x_bins = np.arange(pcd[:,0].min(), pcd[:,0].max(), x_cell_size)
+    y_bins = np.arange(pcd[:,1].min(), pcd[:,1].max(), y_cell_size)
+    return len(x_bins)*len(y_bins)*2
 
 def normalize(img):
-  X = img.copy()
-  xmin = np.amin(X)
-  xmax = np.amax(X)
-  X = (X - xmin) / (xmax - xmin)
-  return X.astype(np.float32)
+    X = img.copy()
+    xmin = np.amin(X)
+    xmax = np.amax(X)
+    X = (X - xmin) / (xmax - xmin)
+    return X.astype(np.float32)
 
-def torch_tensor_vis(tensor, name):
-    tensor = tensor.detach().cpu().numpy()
-    tensor = np.transpose(tensor, (1, 2, 0))
-    tensor = 255*tensor.squeeze()
-    tensor = tensor.astype(np.uint8)
-    cv2.imshow(name, tensor)
-    return
-
-def numpy_array_vis(array, name):
-    array = array.squeeze()
-    cv2.imshow(name, array)
-    cv2.waitKey(1)
-    return
-
-def torch_to_numpy(tensor):
-    tensor = tensor.detach().cpu().numpy()
-    tensor = np.transpose(tensor, (1, 2, 0))
-    tensor = tensor.squeeze()
-    return tensor
-
-def printUsage():
-   print("Usage: python camera.py [depth|segmentation|scene]")
-
-def getCombinedMask(surfNorm, seg):
- 
-    surfaceNormal_vector_form = surfNorm.copy()
-
-    # conversion from surface normal to pointing vector: color value / 255 * 2.0 - 1.0
-    w,h,channels = surfNorm.shape
-    for i in range(channels):
-        for j in range(w):
-            for k in range(h):
-                color_value = surfNorm[j,k,i]
-                temp = int(color_value / 255 * 2.0 - 1.0)
-                surfaceNormal_vector_form[j,k,i] = temp*255
-
-    # let's get rid of the x and y components, we only care about z component
-    surfaceNormal_vector_form[:,:,1] = 0
-    surfaceNormal_vector_form[:,:,2] = 0
-
-    # filter out small noise
-    filtered = cv2.bilateralFilter(surfaceNormal_vector_form,30,150,150)
-  
-    # blur to get get smoother shapes without gaps
-    blurred = cv2.GaussianBlur(filtered,(5,5),5)
-    
-    # blurred = cv2.GaussianBlur(surfaceNormal_vector_form,(5,5),5)
-
-    # convert to gray for binairzation and thresholding
-    gray_mask = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
-    b, surfaceNormal_mask = cv2.threshold(gray_mask,0,256,cv2.THRESH_BINARY)
-
-    gray_mask = cv2.cvtColor(seg, cv2.COLOR_BGR2GRAY)
-    b, segmentation_mask = cv2.threshold(gray_mask,0,256,cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    combined_mask = cv2.bitwise_and(surfaceNormal_mask, segmentation_mask)
-    return combined_mask, surfaceNormal_mask, segmentation_mask
+def getRotMatrix_uv2worldNED(client):
+    cam_info = client.simGetCameraInfo(3)
+    kin = client.simGetGroundTruthKinematics()
+    orientation = kin.orientation
+    q0, q1, q2, q3 = orientation.w_val, orientation.x_val, orientation.y_val, orientation.z_val
+    rotation_matrix = np.array(([1-2*(q2*q2+q3*q3),2*(q1*q2-q3*q0),2*(q1*q3+q2*q0)],
+                                    [2*(q1*q2+q3*q0),1-2*(q1*q1+q3*q3),2*(q2*q3-q1*q0)],
+                                    [2*(q1*q3-q2*q0),2*(q2*q3+q1*q0),1-2*(q1*q1+q2*q2)]))
+    return rotation_matrix, kin, cam_info
 
 def topNCircles(distance_map_original,N):
     distance_map = distance_map_original.copy()
@@ -190,7 +146,7 @@ def landing_selection(mask, num_circles = 50):
     circles = plotCircles((u_vec, v_vec), radii, data)
     return radii, center_coords, dist_on_skel, circles, distance
 
-def remove_pixels_around_boarder(mask, border_size = 2):
+def remove_pixels_around_border(mask, border_size = 2):
     mask = mask.copy()
     mask[0:border_size,:] = 0
     mask[mask.shape[0]-border_size:,:] = 0
