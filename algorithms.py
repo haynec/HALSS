@@ -187,8 +187,8 @@ def score_landings(halss_data):
   #center_coords_ned = vector3r_list2np(center_coords_ned)[:,:2]
 
   # 1. How large is the landing site
-  radius = np.array(halss_data.radii_uv)
-  size_scores = radius
+  radius = np.array(halss_data.radii_ned)
+  size_scores = radius / radius.max()
 
   # 2. How close is the landing site in the NED frame to quadrotor
   #drone_pos = vector3r2np(client.simGetGroundTruthKinematics().position)
