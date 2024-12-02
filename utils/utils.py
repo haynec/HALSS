@@ -123,7 +123,7 @@ def plotCircles(centers, radii, image, color = None, thickness = 1):
         else:
             xc = int(centers[0][i]+2)
             yc = int(centers[1][i]+2)
-        color_img = cv2.circle(color_img, (yc,xc), radius, color_fill, cv2.FILLED)
+        # color_img = cv2.circle(color_img, (yc,xc), radius, color_fill, cv2.FILLED)
         color_img = cv2.circle(color_img, (yc,xc), radius, color, thickness)
         color_img = cv2.circle(color_img, (yc,xc), 1, color, -1)
     return color_img

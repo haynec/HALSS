@@ -230,8 +230,8 @@ class halss_data_packet:
       v2 = int(0.5+(v + cell_height))
       u2 = int(0.5+(u + cell_width))
       masked_surf_norm = cv2.rectangle(masked_surf_norm, (v1, u1), (v2, u2), (255, 255, 255), -1)
-    masked_surf_norm = np.flipud(masked_surf_norm)
     self.surf_norm = cv2.bitwise_and(surf_norm, surf_norm, mask = masked_surf_norm[:,:,0])
+    self.surf_norm = np.flipud(self.surf_norm)
 
   def landing_selection(self, flags):
       data = prep_safety_mask(self.safety_map)
