@@ -10,6 +10,7 @@ from scipy import interpolate
 import scipy.ndimage
 import skimage
 from skimage.morphology import medial_axis
+from pdb import set_trace as debug
 
 # Custom imports
 from HALSS.utils.utils import *
@@ -96,16 +97,16 @@ class halss_data_packet:
     pcd_kd_tree = scipy.spatial.KDTree(self.pcd_global[:,:2])
     dist, idx = pcd_kd_tree.query(np.array([x_ned_scaled, -y_ned_scaled]))
     if dist > 4:
-      print("Warning! Your landing site is probably in a interpolated region where no point could points are present")
+      print("Warning! Your landing site is probably in a interpolated region where no points are present")
     x_ned_actual, y_ned_actual, z_ned_actual = self.pcd_global[idx,:]
 
     offset = 0
     if flags.flag_offset == True:
-      offset = 1
+      offset = -1
     if self.center_coords_ned.size == 0:
-      self.center_coords_ned = np.array([x_ned_actual, -y_ned_actual, -z_ned_actual-offset]).reshape(1,3)
+      self.center_coords_ned = np.array([x_ned_actual, y_ned_actual, z_ned_actual+offset]).reshape(1,3)
     else:
-      self.center_coords_ned = np.append(self.center_coords_ned, np.array([x_ned_actual, -y_ned_actual, -z_ned_actual-offset]).reshape(1,3), axis=0)
+      self.center_coords_ned = np.append(self.center_coords_ned, np.array([x_ned_actual, y_ned_actual, z_ned_actual+offset]).reshape(1,3), axis=0)
 
   def center_coord_ned_to_uv(self):
     u_vec = np.zeros(len(self.center_coords_ned))
@@ -160,7 +161,7 @@ class halss_data_packet:
     self.scale_uv_2_world()
     x_pcd_to_surface = self.sn_x_min - (self.sn_x_max-self.sn_x_min)/(self.pcd_x_max- self.pcd_x_min) * (self.pcd_x_min)
     y_pcd_to_surface = self.sn_y_min + (self.sn_y_max-self.sn_y_min) * (0 - self.pcd_y_min)/(self.pcd_y_max - self.pcd_y_min)
-
+  
     self.org_x = x_pcd_to_surface
     self.org_y = self.sn_y_max - y_pcd_to_surface
     

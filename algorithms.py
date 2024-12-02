@@ -148,7 +148,7 @@ def update_landing_site_radii(site_idx, halss_global, flags, params, buffer = 2)
     return 
 
   if halss_local.surf_norm.max == 0:
-    print("--> [[RADII UPDATE] Warning!: Surface normal is all zeros. Setting Radius to 0")
+    print("--> [[RADII UPDATE] Warning!: Surface normal is all zeros. Setting Radius to 0]")
     halss_global.radii_ned[site_idx] = new_radii_ned = 0.
     return 
 
