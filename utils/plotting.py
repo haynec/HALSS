@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib
+from pdb import set_trace as debug
 
 def plot_coarse_images(halss_data):
     plt.rcParams.update({'font.size': 6})
@@ -42,3 +42,61 @@ def plot_fine_images(halss_data):
         axs[2].set_title('Region Selection')
         plt.show()
     return
+
+def plotCircles(centers, radii, image, colors = None, thickness = 1, fill = True, border = True, center = True, fill_frac = 3):
+    image_clone = image.copy()
+    color_fill = (230,230,255)
+    color = (0,0,255)
+    w = image_clone.shape[0]
+    h = image_clone.shape[1]
+    if len(image_clone.shape) == 2:
+        color_img = np.zeros((w,h,3)).astype(np.uint8)
+        color_img[:,:,0] = image_clone
+        color_img[:,:,1] = image_clone
+        color_img[:,:,2] = image_clone
+    else:
+        color_img = image_clone
+    
+    if type(centers[0]) is int: # Captures the case of only one circle
+        idx = 1
+    elif type(centers[0]) is float:
+        idx = 1
+    else:
+        idx = len(centers[0])
+    
+    if type(radii) is int: # Captures the case of only one circle
+        radii = [radii]
+    elif type(radii) is float:
+        radii = [radii]
+    else:
+        radii = radii
+        
+    for i in range(idx):
+        if colors is not None:
+            if isinstance(colors[0], list) or isinstance(colors[0], tuple):
+                color = colors[i]
+            else:
+                color = colors
+        else:
+            color = (0,0,255)
+        color_bright = [255-(255-c)/fill_frac for c in color]
+        
+        radius = int(radii[i])
+        if type(centers[0]) is int:
+            xc = int(centers[0]+2)
+            yc = int(centers[1]+2)
+        elif type(centers[0]) is float:
+            xc = int(centers[0]+2)
+            yc = int(centers[1]+2)
+        else:
+            xc = int(centers[0][i]+2)
+            yc = int(centers[1][i]+2)
+        
+        # Plotting
+        if fill:
+            color_img = cv2.circle(color_img, (yc,xc), radius, color_bright, cv2.FILLED)
+        if border:
+            color_img = cv2.circle(color_img, (yc,xc), radius, color, thickness)
+        if center:
+            color_img = cv2.circle(color_img, (yc,xc), 1, color, -1)
+    return color_img
