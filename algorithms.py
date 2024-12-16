@@ -42,7 +42,7 @@ def fine_landing_site_selection(site_idx, halss_global, flags, params):
   halss_local.y_cell_size = params.y_cell_size_fine
   
   # Determine the local pointcloud based on the region location
-  halss_local = site_localize(site_idx, halss_global, halss_local)
+  halss_local = region_localize(site_idx, halss_global, halss_local)
 
   # Check if there are enough points in the local pointcloud to generate a surface normal
   if site_check(site_idx, halss_local, flags, params):
@@ -68,7 +68,7 @@ def fine_landing_site_selection(site_idx, halss_global, flags, params):
 
 def update_landing_site(site_idx, halss_global, halss_local, flags, params):
   # Determine the local pointcloud based on the region location
-  halss_local = site_localize(site_idx, halss_global, halss_local)
+  halss_local = region_localize(site_idx, halss_global, halss_local)
   
   # Check if there are enough points in the local pointcloud to generate a surface normal
   if site_check(site_idx, halss_local, flags, params):
@@ -130,10 +130,16 @@ def score_landings(halss_data):
   radius_ned = sf_x * radius
   density_score = np.zeros(len(radius))
   for idx in range(len(radius)):
-    dist = (halss_data.pcd_global[:,0] - halss_data.center_coords_ned[idx][0])**2 + (halss_data.pcd_global[:,1] - (-halss_data.center_coords_ned[idx][1]))**2
+    dist = (halss_data.pcd_global[:,0] - halss_data.center_coords_ned[idx][0])**2 + (halss_data.pcd_global[:,1] - halss_data.center_coords_ned[idx][1])**2
     within = dist < radius_ned[idx]**2
-    density_score[idx] = np.sum(within)/(np.pi*radius_ned[idx]**2)
-  density_score = density_score/density_score.max()
+    if radius_ned[idx] == 0:
+      density_score[idx] = 0
+    else:
+      density_score[idx] = np.sum(within)/(np.pi*radius_ned[idx]**2)
+  if density_score.max() == 0:
+    density_score = np.ones_like(radius)
+  else:
+    density_score = density_score/density_score.max()
 
   # 4. How large is the 99th percentile of the uncertainty map in the landing site
   uncertainty_score = np.ones_like(radius) # deprecated feature (no uncertainty map supported currently)

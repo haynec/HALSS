@@ -146,7 +146,7 @@ class halss_data_packet:
     box_x_min, box_y_min = self.ned2uv(0, 0)
     box_x_max, box_y_max = self.ned2uv(x_cell_size/2, y_cell_size/2)
 
-    cell_width = (box_x_max - box_x_min)*scale_factor
+    cell_width  = (box_x_max - box_x_min)*scale_factor
     cell_height = (box_y_max - box_y_min)*scale_factor
     
     for idx in range(len(u_vec)):
@@ -220,8 +220,8 @@ class halss_data_packet:
     # Calculate geometric information about site
     max_x = int(self.safety_map.shape[0]/2 + region_radius)
     min_x = int(self.safety_map.shape[0]/2 - region_radius)
-    max_y = int(self.safety_map.shape[0]/2 + region_radius)
-    min_y = int(self.safety_map.shape[0]/2 - region_radius)
+    max_y = int(self.safety_map.shape[1]/2 + region_radius)
+    min_y = int(self.safety_map.shape[1]/2 - region_radius)
     center_x = (min_x + max_x)/2
     center_y = (min_y + max_y)/2
     off_min_x = 0 if min_x < 0 else min_x
@@ -241,7 +241,10 @@ class halss_data_packet:
       new_radius = region_radius
 
     # Param update
-    radius_sf = new_radius/self.radii_uv[0]
+    if self.radii_uv[0] > 0:
+      radius_sf = new_radius/self.radii_uv[0]
+    else:
+      radius_sf = 0
     self.radii_ned[0] = self.radii_ned[0]*radius_sf
     self.radii_uv[0] = new_radius
     return new_radius
@@ -270,7 +273,7 @@ class halss_data_packet:
     x_scaled = del_x*self.sf_x
     y_scaled = del_y*self.sf_y
     pcd_kd_tree = scipy.spatial.KDTree(self.pcd_global[:,:2])
-    dist,idx_tree = pcd_kd_tree.query(np.array([x_scaled, -y_scaled]))
+    dist,idx_tree = pcd_kd_tree.query(np.array([x_scaled, y_scaled]))
     if dist > 4:
       print("Warning! Your landing site is probably in a interpolated region where no points are present")
     x,y,z = self.pcd_global[idx_tree,:]
@@ -296,7 +299,8 @@ class halss_data_packet:
     # Find NED Origin in UV Pixel Space
     self.scale_uv_2_world()
     x_pcd_to_surface = self.sn_x_min - (self.sn_x_max-self.sn_x_min)/(self.pcd_x_max- self.pcd_x_min) * (self.pcd_x_min)
-    y_pcd_to_surface = self.sn_y_min + (self.sn_y_max-self.sn_y_min) * (0 - self.pcd_y_min)/(self.pcd_y_max - self.pcd_y_min)
+    # y_pcd_to_surface = self.sn_y_min + (self.sn_y_max-self.sn_y_min) * (0 - self.pcd_y_min)/(self.pcd_y_max - self.pcd_y_min)
+    y_pcd_to_surface = self.sn_y_min - (self.sn_y_max-self.sn_y_min)/(self.pcd_y_max- self.pcd_y_min) * (self.pcd_y_min)
   
     self.org_x = x_pcd_to_surface
-    self.org_y = self.sn_y_max - y_pcd_to_surface
+    self.org_y = y_pcd_to_surface

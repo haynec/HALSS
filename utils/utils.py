@@ -1,4 +1,5 @@
 import numpy as np
+from pdb import set_trace as debug
 import cv2
 
 def surface_normal_from_interp_model(x_grid, y_grid, Z_interp, params):
@@ -35,9 +36,9 @@ def topNCircles(distance_map_original,N):
         radii.append(radius)
     return centers, radii
 
-def site_localize(site_idx, packet_global, packet_local):
+def region_localize(site_idx, packet_global, packet_local):
     radius_ned = packet_global.radii_ned_coarse[site_idx]
-    dist_squared = (packet_global.pcd_global[:,0] - packet_global.center_coords_ned_coarse[site_idx][0])**2 + (packet_global.pcd_global[:,1] - (-packet_global.center_coords_ned_coarse[site_idx][1]))**2
+    dist_squared = (packet_global.pcd_global[:,0] - packet_global.center_coords_ned_coarse[site_idx][0])**2 + (packet_global.pcd_global[:,1] - packet_global.center_coords_ned_coarse[site_idx][1])**2
     within = dist_squared < radius_ned**2
     packet_local.pcd_global = packet_global.pcd_global[within]
     packet_local.downsample_pointcloud()
