@@ -103,14 +103,14 @@ class halss_data_packet:
     self.pcd_culled = pcd[idx_culled]
     self.pcd_binned = pcd_bin[idx_culled]
     
-    # # Inject a duplicate point at bins where only one point is present.
-    # pcd_lshift = np.roll(pcd_rem,1,axis=0)
-    # pcd_rshift = np.roll(pcd_rem,-1,axis=0)
-    # idx_noadj = np.where((pcd_lshift[:,0] != pcd_rem[:,0]) & (pcd_rshift[:,0] != pcd_rem[:,0]) | (pcd_lshift[:,1] != pcd_rem[:,1]) & (pcd_rshift[:,1] != pcd_rem[:,1]))[0]
+    # Inject a duplicate point at bins where only one point is present.
+    pcd_lshift = np.roll(pcd_rem,1,axis=0)
+    pcd_rshift = np.roll(pcd_rem,-1,axis=0)
+    idx_noadj = np.where((pcd_lshift[:,0] != pcd_rem[:,0]) & (pcd_rshift[:,0] != pcd_rem[:,0]) | (pcd_lshift[:,1] != pcd_rem[:,1]) & (pcd_rshift[:,1] != pcd_rem[:,1]))[0]
     
-    # # Perform injection
-    # self.pcd_culled = np.insert(self.pcd_culled, idx_noadj, self.pcd_culled[idx_noadj], axis=0)
-    # self.pcd_binned = np.insert(self.pcd_binned, idx_noadj, self.pcd_binned[idx_noadj], axis=0)
+    # Perform injection
+    self.pcd_culled = np.insert(self.pcd_culled, idx_noadj, self.pcd_culled[idx_noadj], axis=0)
+    self.pcd_binned = np.insert(self.pcd_binned, idx_noadj, self.pcd_binned[idx_noadj], axis=0)
 
   def pc_to_surf_normal(self, params):
     """
@@ -210,35 +210,10 @@ class halss_data_packet:
     # Construct flipped (binary) safety map
     safety_map_bin = binarize(self.safety_map)
     safety_map_bin_cp = np.copy(safety_map_bin)
-    
-    # Apply a circular mask to the safety map
-    region_radius = int(params.grid_res/2)
-    mask = np.zeros((safety_map_bin_cp.shape[0], safety_map_bin_cp.shape[1]), dtype = "uint8")
-    cv2.circle(mask, (int(self.safety_map.shape[0]/2), int(self.safety_map.shape[0]/2)), region_radius, 255, -1)
-    masked_safety_map = cv2.bitwise_and(safety_map_bin_cp, safety_map_bin_cp, mask=mask)
-    
-    # Calculate geometric information about site
-    max_x = int(self.safety_map.shape[0]/2 + region_radius)
-    min_x = int(self.safety_map.shape[0]/2 - region_radius)
-    max_y = int(self.safety_map.shape[1]/2 + region_radius)
-    min_y = int(self.safety_map.shape[1]/2 - region_radius)
-    center_x = (min_x + max_x)/2
-    center_y = (min_y + max_y)/2
-    off_min_x = 0 if min_x < 0 else min_x
-    off_min_y = 0 if min_y < 0 else min_y
-    off_max_x = masked_safety_map.shape[0] if max_x > masked_safety_map.shape[0] else max_x
-    off_max_y = masked_safety_map.shape[1] if max_y > masked_safety_map.shape[1] else max_y
-    rel_center_x = center_x - off_min_x
-    rel_center_y = center_y - off_min_y
 
     # Synthesize landing site and compute the new radius
-    landing_site = masked_safety_map[off_min_x:off_max_x, off_min_y:off_max_y]
-    landing_site = np.invert(landing_site.astype(np.uint8))
-    unsafe_pixels = np.nonzero(landing_site)
-    try:
-      new_radius = np.sqrt((rel_center_x - unsafe_pixels[0])**2 + (rel_center_y - unsafe_pixels[1])**2).min()
-    except ValueError:
-      new_radius = region_radius
+    unsafe_pixels = np.nonzero(np.invert(self.safety_map.astype(np.uint8)))
+    new_radius = np.sqrt((self.center_coords_uv[0,0] - unsafe_pixels[0])**2 + (self.center_coords_uv[0,1] - unsafe_pixels[1])**2).min()
 
     # Param update
     if self.radii_uv[0] > 0:
@@ -246,7 +221,8 @@ class halss_data_packet:
     else:
       radius_sf = 0
     self.radii_ned[0] = self.radii_ned[0]*radius_sf
-    self.radii_uv[0] = new_radius
+    self.radii_uv[0] = int(np.floor(new_radius))
+
     return new_radius
 
   def scale_uv_2_world(self):
@@ -294,6 +270,14 @@ class halss_data_packet:
       self.center_coords_ned = np.zeros((self.num_sites,3))
     u, v = self.ned2uv(*self.center_coords_ned[idx][:2].tolist())
     self.center_coords_uv[idx] = np.array([u,v])
+
+  def center_coords_ned_to_uv_coarse(self, idx):
+    if self.center_coords_uv_coarse.size == 0:
+      self.center_coords_uv_coarse = np.zeros((self.num_sites,2))
+    if self.center_coords_ned.size == 0:
+      self.center_coords_ned = np.zeros((self.num_sites,3))
+    u, v = self.ned2uv(*self.center_coords_ned[idx][:2].tolist())
+    self.center_coords_uv_coarse[idx] = np.array([u,v])
     
   def find_NED_origin_uv(self):
     # Find NED Origin in UV Pixel Space

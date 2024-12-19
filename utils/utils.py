@@ -37,9 +37,10 @@ def topNCircles(distance_map_original,N):
     return centers, radii
 
 def region_localize(site_idx, packet_global, packet_local):
-    radius_ned = packet_global.radii_ned_coarse[site_idx]
-    dist_squared = (packet_global.pcd_global[:,0] - packet_global.center_coords_ned_coarse[site_idx][0])**2 + (packet_global.pcd_global[:,1] - packet_global.center_coords_ned_coarse[site_idx][1])**2
-    within = dist_squared < radius_ned**2
+    region_radius_ned = packet_global.radii_ned_coarse[site_idx]
+    region_center_ned = packet_global.center_coords_ned_coarse[site_idx]
+    dist_squared = (packet_global.pcd_global[:,0] - region_center_ned[0])**2 + (packet_global.pcd_global[:,1] - region_center_ned[1])**2
+    within = dist_squared < region_radius_ned**2
     packet_local.pcd_global = packet_global.pcd_global[within]
     packet_local.downsample_pointcloud()
     return packet_local

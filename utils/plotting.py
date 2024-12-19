@@ -91,12 +91,18 @@ def plotCircles(centers, radii, image, colors = None, thickness = 1, fill = True
         else:
             xc = int(centers[0][i]+2)
             yc = int(centers[1][i]+2)
-        
-        # Plotting
+
+        # Plot circle on image such that any unsafe (black) spots in original image are not covered
+        image_clone = color_img.copy()
+        safe_idxs = np.nonzero(np.invert((image_clone[:,:,0] == 0) & (image_clone[:,:,1] == 0) & (image_clone[:,:,2] == 0)))
         if fill:
-            color_img = cv2.circle(color_img, (yc,xc), radius, color_bright, cv2.FILLED)
+            color_img_new = cv2.circle(color_img.copy(), (yc,xc), radius, color_bright, cv2.FILLED)
+            color_img[safe_idxs[0],safe_idxs[1],:] = color_img_new[safe_idxs[0],safe_idxs[1],:]
         if border:
-            color_img = cv2.circle(color_img, (yc,xc), radius, color, thickness)
+            color_img_new = cv2.circle(color_img.copy(), (yc,xc), radius, color, thickness)
+            color_img[safe_idxs[0],safe_idxs[1],:] = color_img_new[safe_idxs[0],safe_idxs[1],:]
         if center:
-            color_img = cv2.circle(color_img, (yc,xc), 1, color, -1)
+            color_img_new = cv2.circle(color_img.copy(), (yc,xc), 1, color, -1)
+            color_img[safe_idxs[0],safe_idxs[1],:] = color_img_new[safe_idxs[0],safe_idxs[1],:]
+            
     return color_img

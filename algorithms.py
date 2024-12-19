@@ -84,7 +84,7 @@ def update_landing_site(site_idx, halss_global, halss_local, flags, params):
   # Update radius of the landing site
   halss_local.update_landing_site(params)
   
-  # Global packet updates
+  # Global packet updates (used for plotting on the global safety map)
   halss_global.center_coords_ned[site_idx] = halss_local.center_coords_ned[0] 
   halss_global.center_coords_ned_to_uv(site_idx)
   halss_global.radii_ned[site_idx] = halss_local.radii_ned[0]
@@ -101,6 +101,11 @@ def update_global_safety_map(halss_global, flags, params):
   
   # Threshold the surface normal map
   halss_global.surf_norm_to_safety_map(params)
+
+  # Update the coarse region information in UV frame
+  for site_idx in range(halss_global.num_sites):
+    halss_global.center_coords_ned_to_uv_coarse(site_idx)
+    halss_global.radii_uv_coarse[site_idx] = halss_global.radii_ned_coarse[site_idx]/halss_global.sf_x
   
   return halss_global
 
