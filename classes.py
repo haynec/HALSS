@@ -38,13 +38,15 @@ class parameters:
 #     UV: Image frame
 class halss_data_packet:
   def __init__(self):
-    self.pcd_global = np.array([])               # [m] Global point cloud data
+    self.type       = None                       # Type of packet: "global" or "local"
+    self.interpolator = 'linear'                 # Interpolation type for the surface normal map (linear, nearest, cubic) -- linear is recommended for stability
+    self.pcd_raw = np.array([])                  # [m] Global point cloud data
     self.pcd_binned = np.array([])               # [m] PCD processing intermediate step: bins the x-y values according to self.x_cell_size and self.y_cell_size
     self.pcd_culled = np.array([])               # [m] Final downsampled (culled) and binned PCD
-    self.pcd_x_min = None                        # [m] Minimum x-value in culled PCD data
-    self.pcd_x_max = None                        # [m] Maximum x-value in culled PCD data
-    self.pcd_y_min = None                        # [m] Minimum y-value in culled PCD data
-    self.pcd_y_max = None                        # [m] Maximum y-value in culled PCD data
+    self.region_x_min = None                     # [m] Minimum x-value in culled PCD data
+    self.region_x_max = None                     # [m] Maximum x-value in culled PCD data
+    self.region_y_min = None                     # [m] Minimum y-value in culled PCD data
+    self.region_y_max = None                     # [m] Maximum y-value in culled PCD data
     self.org_x = None                            # [px] Origin of the UV frame in the x-direction
     self.org_y = None                            # [px] Origin of the UV frame in the y-direction
     self.sf_x = None                             # [m/pixel] Scaling factor from NED to UV frame in the x-direction
@@ -75,7 +77,7 @@ class halss_data_packet:
     """
     Performs a downsampling operation on the point cloud "pcd_global"
     """
-    pcd = self.pcd_global
+    pcd = self.pcd_raw
     x_cell_size = self.x_cell_size
     y_cell_size = self.y_cell_size
     
@@ -116,15 +118,34 @@ class halss_data_packet:
     """
     Converts the culled point cloud to a surface normal image
     """
-    model_x_data = np.linspace(min(self.pcd_culled[:,0]), max(self.pcd_culled[:,0]), params.grid_res)
-    model_y_data = np.linspace(min(self.pcd_culled[:,1]), max(self.pcd_culled[:,1]), params.grid_res)
+    if self.type == "global":
+      x_min = self.pcd_culled[:,0].min()
+      x_max = self.pcd_culled[:,0].max()
+      y_min = self.pcd_culled[:,1].min()
+      y_max = self.pcd_culled[:,1].max()
+    elif self.type == "local":
+      x_min = self.center_coords_ned_coarse[0] - self.radii_ned_coarse
+      x_max = self.center_coords_ned_coarse[0] + self.radii_ned_coarse
+      y_min = self.center_coords_ned_coarse[1] + self.radii_ned_coarse
+      y_max = self.center_coords_ned_coarse[1] - self.radii_ned_coarse
+    else:
+      raise Exception("Error! Invalid packet type")
+
+    model_x_data = np.linspace(x_min, x_max, params.grid_res)
+    model_y_data = np.linspace(y_min, y_max, params.grid_res)
     X, Y = np.meshgrid(model_x_data, model_y_data)
     
-    f_linear = interpolate.LinearNDInterpolator(list(zip(self.pcd_culled[:,0], self.pcd_culled[:,1])), self.pcd_culled[:,2])
-    Z = f_linear(X, Y)
-    
+    if self.interpolator == "linear":
+      interp_model = interpolate.LinearNDInterpolator(list(zip(self.pcd_culled[:,0], self.pcd_culled[:,1])), self.pcd_culled[:,2])
+    elif self.interpolator == "nearest":
+      interp_model = interpolate.NearestNDInterpolator(list(zip(self.pcd_culled[:,0], self.pcd_culled[:,1])), self.pcd_culled[:,2])
+    elif self.interpolator == "cubic":
+      interp_model = interpolate.CloughTocher2DInterpolator(list(zip(self.pcd_culled[:,0], self.pcd_culled[:,1])), self.pcd_culled[:,2])
+    else:
+      raise Exception("Error! Invalid interpolator type")
+      
+    Z = interp_model(X, Y)
     surf_norm_img = surface_normal_from_interp_model(model_x_data, model_y_data, Z, params)
-
     self.surf_norm = cv2.cvtColor(surf_norm_img, cv2.COLOR_BGR2RGB)
   
   def mask_surf_norm(self, scale_factor = 2):
@@ -216,11 +237,7 @@ class halss_data_packet:
     new_radius = np.sqrt((self.center_coords_uv[0,0] - unsafe_pixels[0])**2 + (self.center_coords_uv[0,1] - unsafe_pixels[1])**2).min()
 
     # Param update
-    if self.radii_uv[0] > 0:
-      radius_sf = new_radius/self.radii_uv[0]
-    else:
-      radius_sf = 0
-    self.radii_ned[0] = self.radii_ned[0]*radius_sf
+    self.radii_ned[0] = new_radius*self.sf_x
     self.radii_uv[0] = int(np.floor(new_radius))
 
     return new_radius
@@ -230,12 +247,20 @@ class halss_data_packet:
     self.sn_x_max = self.surf_norm.shape[1]
     self.sn_y_min = 0
     self.sn_y_max = self.surf_norm.shape[0]
-    self.pcd_x_min = self.pcd_global[:,0].min()
-    self.pcd_x_max = self.pcd_global[:,0].max()
-    self.pcd_y_min = self.pcd_global[:,1].min()
-    self.pcd_y_max = self.pcd_global[:,1].max()
-    self.sf_x = (self.pcd_x_max-self.pcd_x_min)/(self.sn_x_max - self.sn_x_min)
-    self.sf_y = (self.pcd_y_max-self.pcd_y_min)/(self.sn_y_max - self.sn_y_min)
+    if self.type == "global":
+      self.region_x_min = self.pcd_raw[:,0].min()
+      self.region_x_max = self.pcd_raw[:,0].max()
+      self.region_y_min = self.pcd_raw[:,1].min()
+      self.region_y_max = self.pcd_raw[:,1].max()
+    elif self.type == "local":
+      self.region_x_min = self.center_coords_ned_coarse[0] - self.radii_ned_coarse
+      self.region_x_max = self.center_coords_ned_coarse[0] + self.radii_ned_coarse
+      self.region_y_min = self.center_coords_ned_coarse[1] - self.radii_ned_coarse
+      self.region_y_max = self.center_coords_ned_coarse[1] + self.radii_ned_coarse
+    else:
+      raise Exception("Error! Invalid packet type")
+    self.sf_x = (self.region_x_max-self.region_x_min)/(self.sn_x_max - self.sn_x_min)
+    self.sf_y = (self.region_y_max-self.region_y_min)/(self.sn_y_max - self.sn_y_min)
   
   def ned2uv(self, x, y):
     self.scale_uv_2_world()
@@ -248,11 +273,11 @@ class halss_data_packet:
     del_y = u - self.org_y
     x_scaled = del_x*self.sf_x
     y_scaled = del_y*self.sf_y
-    pcd_kd_tree = scipy.spatial.KDTree(self.pcd_global[:,:2])
+    pcd_kd_tree = scipy.spatial.KDTree(self.pcd_raw[:,:2])
     dist,idx_tree = pcd_kd_tree.query(np.array([x_scaled, y_scaled]))
     if dist > 4:
       print("Warning! Your landing site is probably in a interpolated region where no points are present")
-    x,y,z = self.pcd_global[idx_tree,:]
+    x,y,z = self.pcd_raw[idx_tree,:]
     return x,y,z
 
   def center_coords_uv_to_ned(self, idx):
@@ -282,9 +307,7 @@ class halss_data_packet:
   def find_NED_origin_uv(self):
     # Find NED Origin in UV Pixel Space
     self.scale_uv_2_world()
-    x_pcd_to_surface = self.sn_x_min - (self.sn_x_max-self.sn_x_min)/(self.pcd_x_max- self.pcd_x_min) * (self.pcd_x_min)
-    # y_pcd_to_surface = self.sn_y_min + (self.sn_y_max-self.sn_y_min) * (0 - self.pcd_y_min)/(self.pcd_y_max - self.pcd_y_min)
-    y_pcd_to_surface = self.sn_y_min - (self.sn_y_max-self.sn_y_min)/(self.pcd_y_max- self.pcd_y_min) * (self.pcd_y_min)
-  
+    x_pcd_to_surface = self.sn_x_min - (self.sn_x_max-self.sn_x_min)/(self.region_x_max- self.region_x_min) * (self.region_x_min)
+    y_pcd_to_surface = self.sn_y_min - (self.sn_y_max-self.sn_y_min)/(self.region_y_max- self.region_y_min) * (self.region_y_min)  
     self.org_x = x_pcd_to_surface
     self.org_y = y_pcd_to_surface

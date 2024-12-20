@@ -39,21 +39,21 @@ def topNCircles(distance_map_original,N):
 def region_localize(site_idx, packet_global, packet_local):
     region_radius_ned = packet_global.radii_ned_coarse[site_idx]
     region_center_ned = packet_global.center_coords_ned_coarse[site_idx]
-    dist_squared = (packet_global.pcd_global[:,0] - region_center_ned[0])**2 + (packet_global.pcd_global[:,1] - region_center_ned[1])**2
+    dist_squared = (packet_global.pcd_raw[:,0] - region_center_ned[0])**2 + (packet_global.pcd_raw[:,1] - region_center_ned[1])**2
     within = dist_squared < region_radius_ned**2
-    packet_local.pcd_global = packet_global.pcd_global[within]
+    packet_local.pcd_raw = packet_global.pcd_raw[within]
     packet_local.downsample_pointcloud()
     return packet_local
 
 def site_check(site_idx, packet, flags, params):
     if len(packet.pcd_culled) > 10:
         if flags.flag_debug:
-            print("--> [[FINE SELECTION] DEBUG: Number of points in local pointcloud for Site " + str(site_idx) + ": " + str(len(packet.pcd_culled)) + " out of " + str(maximum_possible_points(packet.pcd_global, packet.x_cell_size, packet.y_cell_size)) + " possible points]")
-        if len(packet.pcd_culled) > maximum_possible_points(packet.pcd_global, packet.x_cell_size, packet.y_cell_size):
-            print("--> [[FINE SELECTION] Warning!: More points in the culled PCD than possible.]")
+            print("--> [[Site " + str(site_idx) + "] DEBUG: Number of points in local pointcloud: " + str(len(packet.pcd_culled)) + " out of " + str(maximum_possible_points(packet.pcd_raw, packet.x_cell_size, packet.y_cell_size)) + " possible points]")
+        if len(packet.pcd_culled) > maximum_possible_points(packet.pcd_raw, packet.x_cell_size, packet.y_cell_size):
+            print("--> [[Site " + str(site_idx) + "] Warning!: More points in the culled PCD than possible.]")
         return True
     else:
-        print("--> [[FINE SELECTION] Warning!: There are probably not enough points in the landing site to generate a surface normal. Setting Radius to 0]")
+        print("--> [[Site " + str(site_idx) + "] Warning!: There are probably not enough points in the landing site to generate a surface normal. Setting Radius to 0]")
         return False
 
 def invert(png):

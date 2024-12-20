@@ -37,9 +37,13 @@ def coarse_landing_region_selection(halss_global, flags, params):
 def fine_landing_site_selection(site_idx, halss_global, flags, params):
   # Construct a data packet associated with the local landing region
   halss_local = halss_data_packet()
+  halss_local.type = 'local'
+  halss_local.interpolator = halss_global.interpolator
   halss_local.num_sites = 1
   halss_local.x_cell_size = params.x_cell_size_fine
   halss_local.y_cell_size = params.y_cell_size_fine
+  halss_local.center_coords_ned_coarse = halss_global.center_coords_ned_coarse[site_idx,:].flatten()
+  halss_local.radii_ned_coarse = halss_global.radii_ned_coarse[site_idx]
   
   # Determine the local pointcloud based on the region location
   halss_local = region_localize(site_idx, halss_global, halss_local)
@@ -47,16 +51,25 @@ def fine_landing_site_selection(site_idx, halss_global, flags, params):
   # Check if there are enough points in the local pointcloud to generate a surface normal
   if site_check(site_idx, halss_local, flags, params):
     halss_local.pc_to_surf_normal(params)
+    proceed_find_site = True
   else:
-    return halss_global, halss_local
+    proceed_find_site = False
 
-  # Generate the adjusted surface normal map with thresholding
-  halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (params.grid_res, params.grid_res))
-  halss_local.surf_norm_to_safety_map(params)
-  halss_local.find_NED_origin_uv() # locates the NED origin in the UV frame
-  
-  # Perform the fine landing site selection
-  halss_local.find_landing_site()
+  if proceed_find_site:
+    # Generate the adjusted surface normal map with thresholding
+    halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (params.grid_res, params.grid_res))
+    halss_local.surf_norm_to_safety_map(params)
+    halss_local.find_NED_origin_uv() # locates the NED origin in the UV frame
+    
+    # Perform the fine landing site selection
+    halss_local.find_landing_site()
+  else:
+    # Construct a zeroed out safety map 
+    halss_local.safety_map = np.zeros((params.grid_res, params.grid_res, 3)).astype(np.uint8)
+    
+    # Set radius to 0 if there are not enough points in the local pointcloud
+    halss_local.radii_ned[0] = 0
+    halss_local.radii_uv[0] = 0
   
   # Global packet updates
   halss_global.center_coords_ned[site_idx] = halss_local.center_coords_ned[0] 
@@ -73,22 +86,31 @@ def update_landing_site(site_idx, halss_global, halss_local, flags, params):
   # Check if there are enough points in the local pointcloud to generate a surface normal
   if site_check(site_idx, halss_local, flags, params):
     halss_local.pc_to_surf_normal(params)
+    proceed_update_radii = True
   else:
-    return halss_global, halss_local
+    proceed_update_radii = False
   
-  # Generate the adjusted surface normal map with thresholding
-  halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (params.grid_res, params.grid_res))
-  halss_local.surf_norm_to_safety_map(params)
-  halss_local.find_NED_origin_uv() # locates the NED origin in the UV frame
-  
-  # Update radius of the landing site
-  halss_local.update_landing_site(params)
+  if proceed_update_radii:
+    # Generate the adjusted surface normal map with thresholding
+    halss_local.surf_norm = cv2.resize(halss_local.surf_norm, (params.grid_res, params.grid_res))
+    halss_local.surf_norm_to_safety_map(params)
+    halss_local.find_NED_origin_uv() # locates the NED origin in the UV frame
+    
+    # Update radius of the landing site
+    halss_local.update_landing_site(params)
+  else:
+    # Construct a zeroed out safety map 
+    halss_local.safety_map = np.zeros((params.grid_res, params.grid_res, 3)).astype(np.uint8)
+    
+    # Set radius to 0 if there are not enough points in the local pointcloud
+    halss_local.radii_ned[0] = 0
+    halss_local.radii_uv[0] = 0
   
   # Global packet updates (used for plotting on the global safety map)
   halss_global.center_coords_ned[site_idx] = halss_local.center_coords_ned[0] 
   halss_global.center_coords_ned_to_uv(site_idx)
   halss_global.radii_ned[site_idx] = halss_local.radii_ned[0]
-  halss_global.radii_uv[site_idx]  = halss_local.radii_ned[0]/halss_global.sf_x
+  halss_global.radii_uv[site_idx]  = halss_global.radii_ned[site_idx]/halss_global.sf_x
   
   return halss_global, halss_local
 
@@ -135,7 +157,7 @@ def score_landings(halss_data):
   radius_ned = sf_x * radius
   density_score = np.zeros(len(radius))
   for idx in range(len(radius)):
-    dist = (halss_data.pcd_global[:,0] - halss_data.center_coords_ned[idx][0])**2 + (halss_data.pcd_global[:,1] - halss_data.center_coords_ned[idx][1])**2
+    dist = (halss_data.pcd_raw[:,0] - halss_data.center_coords_ned[idx][0])**2 + (halss_data.pcd_raw[:,1] - halss_data.center_coords_ned[idx][1])**2
     within = dist < radius_ned[idx]**2
     if radius_ned[idx] == 0:
       density_score[idx] = 0
