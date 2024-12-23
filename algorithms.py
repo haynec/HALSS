@@ -10,6 +10,7 @@ import scipy.ndimage
 
 # Custom imports
 from HALSS.classes import *
+from HALSS.utils.utils import *
 
 def coarse_landing_region_selection(halss_global, flags, params):
   # Performs landing site selection for the coarse hazard detection algorithm
@@ -31,7 +32,7 @@ def coarse_landing_region_selection(halss_global, flags, params):
   halss_global.center_coords_uv_coarse = halss_global.center_coords_uv.copy()
   halss_global.radii_ned_coarse = halss_global.radii_ned.copy()
   halss_global.radii_uv_coarse = halss_global.radii_uv.copy()
-  
+
   return halss_global
 
 def fine_landing_site_selection(site_idx, halss_global, flags, params):
@@ -66,10 +67,13 @@ def fine_landing_site_selection(site_idx, halss_global, flags, params):
   else:
     # Construct a zeroed out safety map 
     halss_local.safety_map = np.zeros((params.grid_res, params.grid_res, 3)).astype(np.uint8)
+    halss_local.surf_norm = np.zeros((params.grid_res, params.grid_res, 3)).astype(np.float32)
     
     # Set radius to 0 if there are not enough points in the local pointcloud
-    halss_local.radii_ned[0] = 0
-    halss_local.radii_uv[0] = 0
+    halss_local.center_coords_ned = halss_global.center_coords_ned_coarse[site_idx,:].reshape((1,3))
+    halss_local.center_coords_uv = np.array([params.grid_res//2, params.grid_res//2]).reshape((1,2))
+    halss_local.radii_ned = [0.]
+    halss_local.radii_uv = [0]
   
   # Global packet updates
   halss_global.center_coords_ned[site_idx] = halss_local.center_coords_ned[0] 
@@ -101,13 +105,13 @@ def update_landing_site(site_idx, halss_global, halss_local, flags, params):
   else:
     # Construct a zeroed out safety map 
     halss_local.safety_map = np.zeros((params.grid_res, params.grid_res, 3)).astype(np.uint8)
+    halss_local.surf_norm = np.zeros((params.grid_res, params.grid_res, 3)).astype(np.float32)
     
     # Set radius to 0 if there are not enough points in the local pointcloud
-    halss_local.radii_ned[0] = 0
-    halss_local.radii_uv[0] = 0
+    halss_local.radii_ned = [0.]
+    halss_local.radii_uv = [0]
   
   # Global packet updates (used for plotting on the global safety map)
-  halss_global.center_coords_ned[site_idx] = halss_local.center_coords_ned[0] 
   halss_global.center_coords_ned_to_uv(site_idx)
   halss_global.radii_ned[site_idx] = halss_local.radii_ned[0]
   halss_global.radii_uv[site_idx]  = halss_global.radii_ned[site_idx]/halss_global.sf_x

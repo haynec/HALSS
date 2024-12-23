@@ -10,6 +10,7 @@ from scipy import interpolate
 import scipy.ndimage
 from skimage.morphology import medial_axis
 from pdb import set_trace as debug
+import time
 
 # Custom imports
 from HALSS.utils.utils import *
@@ -169,9 +170,9 @@ class halss_data_packet:
 
     cell_width  = (box_x_max - box_x_min)*scale_factor
     cell_height = (box_y_max - box_y_min)*scale_factor
-    
+
     for idx in range(len(u_vec)):
-      u = u_vec[idx] - (2*self.org_y - self.sn_x_max)
+      u = u_vec[idx]
       v = v_vec[idx]
       v1 = int(0.5+(v - cell_height))
       u1 = int(0.5+(u - cell_width))
@@ -259,8 +260,8 @@ class halss_data_packet:
       self.region_y_max = self.center_coords_ned_coarse[1] + self.radii_ned_coarse
     else:
       raise Exception("Error! Invalid packet type")
-    self.sf_x = (self.region_x_max-self.region_x_min)/(self.sn_x_max - self.sn_x_min)
-    self.sf_y = (self.region_y_max-self.region_y_min)/(self.sn_y_max - self.sn_y_min)
+    self.sf_x = (self.region_x_max - self.region_x_min)/(self.sn_x_max - self.sn_x_min)
+    self.sf_y = (self.region_y_max - self.region_y_min)/(self.sn_y_max - self.sn_y_min)
   
   def ned2uv(self, x, y):
     self.scale_uv_2_world()
@@ -299,15 +300,15 @@ class halss_data_packet:
   def center_coords_ned_to_uv_coarse(self, idx):
     if self.center_coords_uv_coarse.size == 0:
       self.center_coords_uv_coarse = np.zeros((self.num_sites,2))
-    if self.center_coords_ned.size == 0:
-      self.center_coords_ned = np.zeros((self.num_sites,3))
-    u, v = self.ned2uv(*self.center_coords_ned[idx][:2].tolist())
+    if self.center_coords_ned_coarse.size == 0:
+      self.center_coords_ned_coarse = np.zeros((self.num_sites,3))
+    u, v = self.ned2uv(*self.center_coords_ned_coarse[idx][:2].tolist())
     self.center_coords_uv_coarse[idx] = np.array([u,v])
     
   def find_NED_origin_uv(self):
     # Find NED Origin in UV Pixel Space
     self.scale_uv_2_world()
-    x_pcd_to_surface = self.sn_x_min - (self.sn_x_max-self.sn_x_min)/(self.region_x_max- self.region_x_min) * (self.region_x_min)
-    y_pcd_to_surface = self.sn_y_min - (self.sn_y_max-self.sn_y_min)/(self.region_y_max- self.region_y_min) * (self.region_y_min)  
+    x_pcd_to_surface = self.sn_x_min - (self.sn_x_max-self.sn_x_min)/(self.region_x_max - self.region_x_min) * (self.region_x_min)
+    y_pcd_to_surface = self.sn_y_min - (self.sn_y_max-self.sn_y_min)/(self.region_y_max - self.region_y_min) * (self.region_y_min)  
     self.org_x = x_pcd_to_surface
     self.org_y = y_pcd_to_surface

@@ -144,3 +144,6 @@ def prep_surf_norm(mask):
                     value=0
                 )
     return data
+
+def print_class_attributes(obj):
+    print(',\n '.join("%s: %s" % item for item in vars(obj).items()))
