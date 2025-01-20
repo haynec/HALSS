@@ -131,8 +131,10 @@ def update_global_safety_map(halss_global, flags, params):
   # Update the coarse region information in UV frame
   for site_idx in range(halss_global.num_sites):
     halss_global.center_coords_ned_to_uv_coarse(site_idx)
+    halss_global.center_coords_ned_to_uv(site_idx)
     halss_global.radii_uv_coarse[site_idx] = halss_global.radii_ned_coarse[site_idx]/halss_global.sf_x
-  
+    halss_global.radii_uv[site_idx] = halss_global.radii_ned[site_idx]/halss_global.sf_x
+
   return halss_global
 
 def score_landings(halss_data):

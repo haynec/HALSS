@@ -68,7 +68,6 @@ def scale_image(img, pcd_combined_array):
     return img
 
 def scale_theta(img):
-    # 
     img = img.astype(np.float32)
     img = img - np.min(img)
     img = img / np.max(img)
