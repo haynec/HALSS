@@ -7,6 +7,7 @@ sys.path.append(root_path)
 import numpy as np
 import cv2
 import scipy.ndimage
+from copy import copy
 
 # Custom imports
 from HALSS.classes import *
@@ -184,3 +185,49 @@ def score_landings(halss_data):
   prox_score = prox_score/prox_score.max()
 
   return np.vstack((size_scores, drone_scores, density_score, uncertainty_score, prox_score))
+
+def downsample_candidate_sites(packet, packet_old, scores, new_site_count, criterion, targs_rem):
+  
+  # If no previous targets remain, select the best target based on the criterion
+  center_coords_ned = packet.center_coords_ned
+  if len(targs_rem) == 0:
+    # Downsample from packet.max_sites to new_site_count based on scores
+    if criterion == "prox":
+      idx = np.argsort(scores[4,:])
+    elif criterion == "drone":
+      idx = np.argsort(scores[1,:])
+    elif criterion == "density":
+      idx = np.argsort(scores[2,:])
+    elif criterion == "size":
+      idx = np.argsort(scores[0,:])
+    elif criterion == "uncertainty":
+      idx = np.argsort(scores[3,:])
+    else:
+      raise ValueError("Invalid criterion")
+    
+    # Get highest-ranking target, then get remaining targets closest to that target
+    idx_ds = [idx[0]]
+    ref_position = center_coords_ned[idx_ds[0]]
+    
+  # Else, compute ref position based on old target locations and leave idx_ds empty
+  else:
+    idx_ds = []
+    ref_position = np.mean(packet_old.center_coords_ned[targs_rem], axis=0)
+    
+  # Find remaining targets closest to the best target in candidate pool
+  idx_closest_to_best = list(np.argsort(np.linalg.norm(center_coords_ned - ref_position, axis = 1)))
+  idx_ds = idx_ds + idx_closest_to_best[len(idx_ds):new_site_count]
+  
+  # Create new packet that downsamples all information from old packet
+  packet_ds = copy(packet)
+  packet_ds.num_sites = new_site_count
+  packet_ds.center_coords_ned = packet.center_coords_ned[idx_ds,:]
+  packet_ds.center_coords_uv = packet.center_coords_uv[idx_ds,:]
+  packet_ds.radii_ned = packet.radii_ned[idx_ds]
+  packet_ds.radii_uv = list(np.array(packet.radii_uv)[idx_ds])
+  packet_ds.center_coords_ned_coarse = packet.center_coords_ned_coarse[idx_ds,:]
+  packet_ds.center_coords_uv_coarse = packet.center_coords_uv_coarse[idx_ds,:]
+  packet_ds.radii_ned_coarse = packet.radii_ned_coarse[idx_ds]
+  packet_ds.radii_uv_coarse = list(np.array(packet.radii_uv_coarse)[idx_ds])
+  
+  return packet_ds
