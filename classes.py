@@ -193,8 +193,10 @@ class halss_data_packet:
       u_vec = np.zeros(len(center_coords))
       v_vec = np.zeros(len(center_coords))
       for i in range(len(center_coords)):
-          u_vec[i] = center_coords[i][0][0]
-          v_vec[i] = center_coords[i][1][0]
+          # Undo the two-pixel padding for real circles, preserving empty results.
+          offset = 2 if radii[i] > 0 else 0
+          u_vec[i] = center_coords[i][0][0] - offset
+          v_vec[i] = center_coords[i][1][0] - offset
 
       # Param update
       self.radii_uv = radii
